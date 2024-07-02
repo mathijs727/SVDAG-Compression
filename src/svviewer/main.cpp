@@ -32,9 +32,9 @@
 #include "renderer_monitor.hpp"
 #include "octree_dda_renderer.hpp"
 
-#include "imgui.h"
-#include "imgui_impl_opengl3.h"
-#include "imgui_impl_glfw.h"
+#include <imgui.h>
+#include <imgui_impl_opengl3.h>
+#include <imgui_impl_glfw.h>
 
 #define UPDATE_INFO_TIME 200.0 // ms
 #define SCREEN_WIDTH	1280

@@ -155,7 +155,7 @@ void Camera::update(bool sticky) {
     if (io.WantCaptureMouse) {
         return;
     }
-	if (!ImGui::IsAnyWindowHovered() && !ImGui::IsAnyItemHovered()) {
+    if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !ImGui::IsAnyItemHovered()) {
 		if(glfwGetMouseButton(_glfwWindow, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS) {
 			if(_gestureState != ROTATING) {
 				_clickedCoords = _coords;
