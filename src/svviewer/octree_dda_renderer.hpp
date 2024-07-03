@@ -70,7 +70,7 @@ public:
 	inline void toggleShadowsEnabled() { _enableShadows = !_enableShadows; }
 
 	inline sl::aabox3f getSceneBBox() { return _encodedOctree->getSceneBBox(); }
-	inline void setEncodedOctree(EncodedOctree * eo) { _encodedOctree = eo; }
+	void setEncodedOctree(EncodedOctree * eo);
 
 	inline void setDrawLevel(unsigned int dl) { _drawLevel = sl::max(1U, sl::min(dl, getNLevels())); }
 	inline void incDrawLevel(int k = 1) { setDrawLevel(_drawLevel + k); }
