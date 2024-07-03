@@ -28,7 +28,7 @@
 #include <symvox/encoded_ussvdag.hpp>
 #include <symvox/encoded_ssvdag.hpp>
 
-#define SHADER_FILE ("../shaders/octree_dda.frag.glsl")
+#define SHADER_FILE ("shaders/octree_dda.frag.glsl")
 #define NUM_MAX_HS_SAMPLES 256
 
 OctreeDDARenderer::OctreeDDARenderer(EncodedOctree * eo) {

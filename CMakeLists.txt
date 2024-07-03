@@ -104,6 +104,22 @@ if(BUILD_SVVIEWER)
 		"src/svviewer/halton.hpp"
 		"src/svviewer/halton.cpp"
 	)
-
 	target_link_libraries(svviewer PUBLIC symvox OpenGL::GL glfw GLEW::glew imgui::imgui)
+
+	# Copy shaders
+	set(shader_copies "")
+	file(GLOB shader_sources "${PROJECT_SOURCE_DIR}/shaders/*.glsl")
+	foreach (shader_file IN LISTS shader_sources)
+		get_filename_component(file_name ${shader_file} NAME)
+		add_custom_command(
+			OUTPUT "${CMAKE_BINARY_DIR}/shaders/${file_name}"
+			COMMAND ${CMAKE_COMMAND} -E copy
+			"${PROJECT_SOURCE_DIR}/shaders/${file_name}"
+			"${CMAKE_BINARY_DIR}/shaders/${file_name}"
+			DEPENDS "${PROJECT_SOURCE_DIR}/shaders/${file_name}"
+		)
+		LIST(APPEND shader_copies "${CMAKE_BINARY_DIR}/shaders/${file_name}")
+	endforeach()
+	add_custom_target(copy_shaders DEPENDS ${shader_copies})
+	add_dependencies(svviewer copy_shaders)
 endif(BUILD_SVVIEWER)
