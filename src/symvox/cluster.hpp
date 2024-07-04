@@ -153,8 +153,12 @@ public:
 
         std::string nT = std::to_string((int) omp_get_max_threads());
         std::string I = std::to_string(inflation);
+#if WIN32
+        std::string cmd = "wsl --exec mcl " + fnIn + " --abc -I " + I + " -q x -V all -te " + nT + " -o " + fnOut; // -scheme 1
+#else
         std::string cmd = "$HOME/local/bin/mcl " + fnIn + " --abc -I " + I + " -q x -V all -te " + nT + " -o " + fnOut; // -scheme 1
-//        std::string cmd = "export OMP_NUM_THREADS=" + nT + "; ../../hipmcl/bin/hipmcl -M " + fnIn + " -I 2.0 -per-process-mem 0.1 -o " + fnOut;
+#endif
+        //        std::string cmd = "export OMP_NUM_THREADS=" + nT + "; ../../hipmcl/bin/hipmcl -M " + fnIn + " -I 2.0 -per-process-mem 0.1 -o " + fnOut;
 
         int res = std::system(cmd.c_str());
 

@@ -19,7 +19,7 @@ For additional information or questions, I would be happy to answer those throug
 Follow the instructions of the original readme for the initial setup.
 Two additional optional requirements can be installed:
 
-* For lossy compression, the clustering program [MCL](https://micans.org/mcl/) needs to be installed in its default location (`$HOME/local/bin/mcl`). This path can be adjusted in `src/symvox/cluster.hpp`.
+* For lossy compression, the clustering program [MCL](https://micans.org/mcl/) needs to be installed and added to `$PATH`. Windows users can install MCL using Windows Subsystem for Linux (`sudo apt install mcl` in Ubuntu). See `src/symvox/cluster.hpp` for details.
 * For the voxelization of LAS/LAZ files (lidar point clouds), the [libLAS](https://liblas.org/) package needs to be installed before building the project.
 
 ## Original readme
