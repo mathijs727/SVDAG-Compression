@@ -773,7 +773,7 @@ void main() {
 			color.g *= 0.5f;
 			color.b = 1.f;
 		}
-#if (SSVDAG || USSVDAG)
+#if (SSVDAG)
 		else if (freqColors) {
 			// Visualize ref count by dividing (sorted) index by num of nodes in level
 			// Todo: Should make this a sperate render mode
