@@ -268,7 +268,7 @@ void handleImgui()
             bool error = loadFile(filenameInput);
             if (!error) {
                 renderer->setEncodedOctree(encoded_octree.get());
-                renderer->uploadData(true);
+                renderer->uploadData();
             }
         }
 
@@ -280,7 +280,7 @@ void handleImgui()
             bool error = loadFile(filenameInput2);
             if (!error) {
                 renderer->setEncodedOctree(encoded_octree.get());
-                renderer->uploadData(true);
+                renderer->uploadData();
             }
         }
 
