@@ -219,14 +219,14 @@ int main(int argc, char ** argv) {
 	// Save base SVDAG and ESVDAG in any case
 	EncodedSVDAG svdag2;
 	svdag2.encode(octree);
-	svdag2.save(basePath + ".svdag");
+	//svdag2.save(basePath + ".svdag");
 
 	
 
 	if (lossy) {
 		EncodedSSVDAG esvdag2;
 		esvdag2.encode(octree);
-		esvdag2.save(basePath + ".esvdag");
+		//esvdag2.save(basePath + ".esvdag");
 	}
 
 	if (lossy) {
@@ -253,7 +253,7 @@ int main(int argc, char ** argv) {
 	EncodedSSVDAG ssvdag;
 	if (!multiLevel) ssvdag.encode(octree);
 
-    bool saveAll = true;
+    bool saveAll = false;
 
     if (saveAll) {
 		std::string infix = "";
