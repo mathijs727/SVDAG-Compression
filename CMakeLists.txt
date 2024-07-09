@@ -81,7 +81,7 @@ add_library(symvox
 	"src/symvox/cluster.hpp"
 )
 target_include_directories(symvox PUBLIC "src")
-target_link_libraries(symvox PUBLIC SpaceLand)
+target_link_libraries(symvox PUBLIC SpaceLand OpenMP::OpenMP_CXX)
 
 add_executable(svbuilder "src/svbuilder/main.cpp")
 target_link_libraries(svbuilder PUBLIC symvox)
