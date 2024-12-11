@@ -552,10 +552,10 @@ void GeomOctree::toSDAG(bool internalCall, bool skipSymmetry) {
 
 	if (!internalCall) {
 		if (_state == S_SVO) {
-			printf("* Transforming SVO -> SDAG (not best way)... "); fflush(stdout);
+			printf("* Transforming SVO -> SDAG (not best way)...\n"); fflush(stdout);
 		}
 		else if (_state == S_DAG) {
-			printf("* Transforming DAG -> SDAG (normal)... "); fflush(stdout);
+			printf("* Transforming DAG -> SDAG (normal)...\n"); fflush(stdout);
 		}
 		else {
 			printf("ERROR! This is not a DAG or SDAG!\n");
@@ -587,6 +587,7 @@ void GeomOctree::toSDAG(bool internalCall, bool skipSymmetry) {
 		uniqueNodesChecker.clear();
 		correspondences.resize(oldLevSize);
 
+        const auto numNodesBefore = _data[lev].size();
         // For each node in this level...
 		for (id_t i = 0; i < _data[lev].size(); i++) {
 
@@ -663,7 +664,7 @@ void GeomOctree::toSDAG(bool internalCall, bool skipSymmetry) {
 		_data[lev].shrink_to_fit();
 		_nNodes += _data[lev].size();
 
-		printf("[%u] %zu nodes/leaves\n", lev, uniqueNodes.size());
+		printf("[%u] %zu -> %zu nodes/leaves\n", lev, numNodesBefore, uniqueNodes.size());
 
         // Update all pointers in the level above
 		for (id_t i = 0; i < _data[lev - 1].size(); i++) {
