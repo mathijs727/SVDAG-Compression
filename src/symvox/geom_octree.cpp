@@ -663,6 +663,8 @@ void GeomOctree::toSDAG(bool internalCall, bool skipSymmetry) {
 		_data[lev].shrink_to_fit();
 		_nNodes += _data[lev].size();
 
+		printf("[%u] %zu nodes/leaves\n", lev, uniqueNodes.size());
+
         // Update all pointers in the level above
 		for (id_t i = 0; i < _data[lev - 1].size(); i++) {
 			Node &n = _data[lev - 1][i];
