@@ -332,6 +332,7 @@ size_t GeomOctree::countVoxelDifferences(uint32_t level, uint32_t lhs, uint32_t 
             }
         }
     }
+    diffCount = 0;
     return diffCount;
 }
 
@@ -987,6 +988,11 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
             hashes[_levels - 3].clear();
             buildMultiMap(0, matchMaps, hashes, lev - 1, lev + 1);
 
+        }
+        // Todo: use higher match depth when lossyDiff is higher than 8
+        buildMultiMap(currentMatchDepth, matchMaps, hashes, lev, lev + 1);
+        _stats.lHashing += _clock.now() - tHashStart;
+
             size_t xxx = 0;
             size_t yyy = 0;
             for (uint32_t i = 0; i < 256; ++i) {
@@ -997,10 +1003,6 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
             }
             printf("Num nodes: %zu\n", yyy);
             printf("Max possible matches: %zu\n", xxx);
-        }
-        // Todo: use higher match depth when lossyDiff is higher than 8
-        buildMultiMap(currentMatchDepth, matchMaps, hashes, lev, lev + 1);
-        _stats.lHashing += _clock.now() - tHashStart;
 
         //////// FINDING EDGES FOR CLUSTERING ////////
         // For all nodes in this level, in reverse order (starting with least referenced)
@@ -1010,20 +1012,24 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
         auto tSimNodeStart = _clock.now();
 
         std::vector<bool> isParentOfClusterReps(_data[lev].size());
+        size_t numParentClusters = 0;
         for (int idA = 0; idA < _data[lev].size(); ++idA) {
             const auto& n = _data[lev][idA];
             // Don't merge nodes that are a parent of a cluster representative
             bool isParentOfClusterRep = false;
             for (int c = 0; c < 8; ++c) {
-                if (!isParentOfClusterRep && n.existsChild(c)) {
+                if (n.existsChild(c)) {
                     if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
                         isParentOfClusterRep = true;
-                        curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
+                        //curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
                     }
                 }
             }
             isParentOfClusterReps[idA] = isParentOfClusterRep;
+            if (isParentOfClusterRep)
+                ++numParentClusters;
         }
+        printf("Num parent clusters: %zu / %zu\n", numParentClusters, _data[lev].size());
 
         // Todo: Try out #pragma omp declare reduction (merge : std::vector<int> : omp_out.insert(omp_out.end(), omp_in.begin(), omp_in.end()))
         printf("Num items %zu\n", _data[lev].size());
@@ -1177,6 +1183,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                 continue;
             correspondences[idA] = (id_t)uniqueNodes.size(); // the correspondence is this node itself
             uniqueNodes.push_back(_data[lev][idA]);
+            //if (isParentOfClusterReps[idA])
+            //    curClusterReps[idA] = true;
         }
 
         // Stats
@@ -1245,6 +1253,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                 correspondences[corId] = repIdNew;
             }
         }
+
+        printf("Reduced %zu to %zu items\n", _data[lev].size(), uniqueNodes.size());
 
         /////////////////////////////////
         //// Replace previous level data
