@@ -3,22 +3,23 @@
 // My own extensions to GeomOctree, to keep it separate from the original SSVDAG codebase
 //
 
+#include <bitset>
+#include <fstream>
+#include <iomanip> // std::setprecision
 #include <memory>
 #include <queue>
 #include <stack>
-#include <fstream>
-#include <iomanip>      // std::setprecision
-#include <bitset>
 
-#include "geom_octree.hpp"
 #include "cluster.hpp"
+#include "geom_octree.hpp"
 
 ////////////////////////////////////////////////////////////////////
 /////////////////////// HELPER FUNCTIONS ///////////////////////////
 ////////////////////////////////////////////////////////////////////
 
 // Initializes the level for each child pointer to be in the next level
-void GeomOctree::initChildLevels() {
+void GeomOctree::initChildLevels()
+{
     // Correcting child levels, in case multiple build steps were used
     for (unsigned int lev = 0; lev < _levels; ++lev) {
         for (id_t nodeIndex = 0; nodeIndex < _data[lev].size(); ++nodeIndex) {
@@ -30,8 +31,9 @@ void GeomOctree::initChildLevels() {
 }
 
 /** Computes a uint64_t hash based on the child bitmasks of a node's children **/
-std::hash <uint64_t> hash64;
-uint64_t GeomOctree::computeNodeHash(const GeomOctree::Node &node, unsigned int depth, std::vector<uint64_t> &childHashes) {
+std::hash<uint64_t> hash64;
+uint64_t GeomOctree::computeNodeHash(const GeomOctree::Node& node, unsigned int depth, std::vector<uint64_t>& childHashes)
+{
     uint64_t key = 0;
 
     // At depth 0, just return the child mask
@@ -52,11 +54,11 @@ uint64_t GeomOctree::computeNodeHash(const GeomOctree::Node &node, unsigned int 
     // For higher depths, combine all children keys with XOR
     else {
         for (unsigned int c = 0; c < 8; ++c) {
-            const auto &child = _data[node.childLevels[c]][node.children[c]];
             uint64_t origKeyHash = hash64(key);
             uint64_t childHash = origKeyHash << (c + 1u); // add some pseudo randomness when no child is at index c
 
             if (node.existsChildPointer(c)) {
+                const auto& child = _data[node.childLevels[c]][node.children[c]];
                 // reuse previous hash if available
                 if (childHashes.empty()) {
                     childHash = hash64(computeNodeHash(child, depth - 1, childHashes));
@@ -73,8 +75,9 @@ uint64_t GeomOctree::computeNodeHash(const GeomOctree::Node &node, unsigned int 
     return key;
 };
 
-uint64_t GeomOctree::computeNodeHashBotUp(const GeomOctree::Node &node, const unsigned int lev,
-        const std::vector<std::vector<uint64_t>> &hashes, uint8_t childMaskMask) {
+uint64_t GeomOctree::computeNodeHashBotUp(const GeomOctree::Node& node, const unsigned int lev,
+    const std::vector<std::vector<uint64_t>>& hashes, uint8_t childMaskMask)
+{
     uint64_t key = 0;
     if (lev == _levels - 1) {
         key += node.childrenBitmask & childMaskMask;
@@ -103,12 +106,14 @@ uint64_t GeomOctree::computeNodeHashBotUp(const GeomOctree::Node &node, const un
 #define WRITE_KEYS_TO_FILE 0
 /** Builds a multi-map of NodeHash -> Nodes with same hash */
 void GeomOctree::buildMultiMap(
-        unsigned int depth,
-        std::vector<std::multimap<uint64_t, id_t>> &matchMaps,
-        std::vector<std::vector<uint64_t>> &hashes,
-        unsigned int levStart,
-        unsigned int levEnd) {
-    printf("[Hashing @D%u...", depth); fflush(stdout);
+    unsigned int depth,
+    std::vector<std::multimap<uint64_t, id_t>>& matchMaps,
+    std::vector<std::vector<uint64_t>>& hashes,
+    unsigned int levStart,
+    unsigned int levEnd)
+{
+    printf("[Hashing @D%u...", depth);
+    fflush(stdout);
 
 #if WRITE_KEYS_TO_FILE
     std::ofstream myfile("keys-" + std::to_string(depth) + ".txt", std::ios::out | std::ios::trunc);
@@ -120,35 +125,39 @@ void GeomOctree::buildMultiMap(
             continue;
         }
 
-        hashes[lev].reserve(_data[lev].size());
+        hashes[lev].resize(_data[lev].size());
         matchMaps[lev].clear();
 
         for (id_t nodeIndex = 0; nodeIndex < _data[lev].size(); ++nodeIndex) {
             uint64_t key = computeNodeHash(
-                    _data[lev][nodeIndex],
-                    depth,
-                    hashes[std::min(_levels - 1u, lev + 1u)]);
+                _data[lev][nodeIndex],
+                depth,
+                hashes[std::min(_levels - 1u, lev + 1u)]);
             matchMaps[lev].insert(std::make_pair(key, nodeIndex));
             hashes[lev][nodeIndex] = key;
 #if WRITE_KEYS_TO_FILE
-                myfile << std::to_string(lev) + ", " + std::to_string(_data[lev][nodeIndex].childrenBitmask) + " ->\t " + std::to_string(key) + "\n";stdout
+            myfile << std::to_string(lev) + ", " + std::to_string(_data[lev][nodeIndex].childrenBitmask) + " ->\t " + std::to_string(key) + "\n";
+            stdout
 #endif
         }
     }
 #if WRITE_KEYS_TO_FILE
     myfile.close();
 #endif
-    printf("]"); fflush(stdout);
+    printf("]");
+    fflush(stdout);
 };
 
-bool checkBit(unsigned int n, unsigned int i) {
+bool checkBit(unsigned int n, unsigned int i)
+{
     return (n >> i) & 1u;
 }
 
 /** Bottom-up version: Will compute hashes for all nodes in a bottom-up fashion, which should be faster, instead of specific levels as in the previous func */
-void GeomOctree::buildHiddenGeomMultiMap(std::vector<std::multimap<uint64_t, id_t>> &matchMaps,
-        std::vector<std::vector<uint64_t>> &hashes) {
-//    printf("[Match maps (BU)..."); fflush(stdout);
+void GeomOctree::buildHiddenGeomMultiMap(std::vector<std::multimap<uint64_t, id_t>>& matchMaps,
+    std::vector<std::vector<uint64_t>>& hashes)
+{
+    //    printf("[Match maps (BU)..."); fflush(stdout);
     for (int lev = _levels - 1; lev >= 0; --lev) {
         matchMaps[lev].clear();
         hashes.clear();
@@ -191,10 +200,11 @@ void GeomOctree::buildHiddenGeomMultiMap(std::vector<std::multimap<uint64_t, id_
             }
         }
     }
-//    printf("]"); fflush(stdout);
+    //    printf("]"); fflush(stdout);
 }
 
-void GeomOctree::DebugHashing() {
+void GeomOctree::DebugHashing()
+{
     printf("DEBUG: Check how often hash collisions happen]\n");
     unsigned int histSize = 10; // num of collision counts to keep track of
 
@@ -212,7 +222,8 @@ void GeomOctree::DebugHashing() {
     for (unsigned int lev = _levels - 2; lev > 0; --lev) {
         std::vector<unsigned int> hist(histSize);
 
-        printf("Level %u: ,", lev); fflush(stdout);
+        printf("Level %u: ,", lev);
+        fflush(stdout);
 
         // Compute node hashes for this node and its children up to the level above the leaves
         // Modify _levels - 1 to -2 to see how hashes collide when ignoring the leaf level
@@ -221,11 +232,11 @@ void GeomOctree::DebugHashing() {
 
         // Loop over every unique hash
         const auto& mm = matchMaps[lev];
-        for(auto it = mm.begin(), end = mm.end(); it != end; it = mm.upper_bound(it->first)) {
+        for (auto it = mm.begin(), end = mm.end(); it != end; it = mm.upper_bound(it->first)) {
             unsigned int count = mm.count(it->first);
-            hist[std::min(count, (unsigned int) (histSize - 1))] += 1;
+            hist[std::min(count, (unsigned int)(histSize - 1))] += 1;
         }
-//        printf("%u", lev);
+        //        printf("%u", lev);
         for (unsigned int i = 1; i < histSize; ++i) {
             printf(", %u", hist[i]);
         }
@@ -233,21 +244,19 @@ void GeomOctree::DebugHashing() {
     }
 }
 
-
 /** Deep recursive subtree comparison **/
 bool GeomOctree::compareSubtrees(
-        unsigned int levA,
-        unsigned int levB,
-        Node &nA, // Should be in a lower level than b
-        Node &nB, // Should be in a higher level than a
-        std::vector<std::map<id_t, std::pair<unsigned int, id_t>>> &nodesInSubtree
-) {
+    unsigned int levA,
+    unsigned int levB,
+    Node& nA, // Should be in a lower level than b
+    Node& nB, // Should be in a higher level than a
+    std::vector<std::map<id_t, std::pair<unsigned int, id_t>>>& nodesInSubtree)
+{
     // If B terminates before A, they are not equal since one or more levels are lost
     // Note: Subtree B is always higher up in the tree compared to subtree A (so a numerically lower level)
     if (nA.hasChildren() && !nB.hasChildren()) {
         return false;
-    }
-    else if (levA == _levels - 1) {
+    } else if (levA == _levels - 1) {
         // If nA is a leaf node, simply compare their child masks, since it doesn't matter what happens further down in B
         return nA.childrenBitmask == nB.childrenBitmask;
     }
@@ -275,8 +284,8 @@ bool GeomOctree::compareSubtrees(
         // Else, compare child subtrees
 
         // Retrieve the child nodes from their respective levels
-        Node &cA = _data[childLevA][nA.children[i]];
-        Node &cB = _data[childLevB][nB.children[i]];
+        Node& cA = _data[childLevA][nA.children[i]];
+        Node& cB = _data[childLevB][nB.children[i]];
 
         // Add child node to the set of unique nodes in the subtree of node A
         nodesInSubtree[childLevA][nA.children[i]] = std::make_pair(childLevB, nB.children[i]); // stores the correspondence between these two nodes
@@ -289,17 +298,53 @@ bool GeomOctree::compareSubtrees(
     return true;
 }
 
+size_t GeomOctree::countVoxelDifferences(uint32_t level, uint32_t lhs, uint32_t rhs)
+{
+    static constexpr uint32_t EmptyChild = std::numeric_limits<uint32_t>::max();
+
+    size_t diffCount = 0;
+    struct StackItem {
+        uint32_t level, lhsNode, rhsNode;
+    };
+    std::stack<StackItem> stack;
+    stack.push({ level, lhs, rhs });
+    while (!stack.empty()) {
+        const auto item = stack.top();
+        stack.pop();
+
+        if (item.level == _levels - 1) {
+            for (int i = 0; i < 8; ++i) {
+                if (item.lhsNode == EmptyChild)
+                    diffCount += _data[item.level][item.rhsNode].existsChild(i);
+                else if (item.rhsNode == EmptyChild)
+                    diffCount += _data[item.level][item.lhsNode].existsChild(i);
+                else
+                    diffCount += _data[item.level][item.lhsNode].existsChild(i) != _data[item.level][item.rhsNode].existsChild(i);
+            }
+        } else {
+            for (int i = 0; i < 8; ++i) {
+                const uint32_t leftChildID = item.lhsNode != EmptyChild && _data[item.level][item.lhsNode].existsChild(i) ? _data[item.level][item.lhsNode].children[i] : EmptyChild;
+                const uint32_t rightChildID = item.rhsNode != EmptyChild && _data[item.level][item.rhsNode].existsChild(i) ? _data[item.level][item.rhsNode].children[i] : EmptyChild;
+                if (item.level < _levels - 2 && (leftChildID != EmptyChild) != (rightChildID != EmptyChild))
+                    return std::numeric_limits<size_t>::max();
+                if (leftChildID != EmptyChild || rightChildID != EmptyChild)
+                    stack.push({ item.level + 1, leftChildID, rightChildID });
+            }
+        }
+    }
+    return diffCount;
+}
 
 /** Deep recursive subtree difference counter: Counts the difference in leaf nodes between two subtrees **/
 void GeomOctree::diffSubtrees(
-        unsigned int levA,
-        unsigned int levB,
-        const Node &nA, // Should be in a lower level than b
-        const Node &nB, // Should be in a higher level than a,
-        const unsigned int abortThreshold, // return before full comparison is finished if diff exceeds this number
-        unsigned int &accumulator,
-        unsigned int &numLeaves
-) {
+    unsigned int levA,
+    unsigned int levB,
+    const Node& nA, // Should be in a lower level than b
+    const Node& nB, // Should be in a higher level than a,
+    const unsigned int abortThreshold, // return before full comparison is finished if diff exceeds this number
+    unsigned int& accumulator,
+    unsigned int& numLeaves)
+{
     const int maxDiffPerLeaf = 4;
 
     // If nA is a leaf node, simply compare their child masks, since it doesn't matter what happens further down in B
@@ -312,7 +357,8 @@ void GeomOctree::diffSubtrees(
                 leafDiff++;
             }
         }
-        if (leafDiff > maxDiffPerLeaf) accumulator += abortThreshold + 1;
+        if (leafDiff > maxDiffPerLeaf)
+            accumulator += abortThreshold + 1;
         return;
     }
 
@@ -324,15 +370,15 @@ void GeomOctree::diffSubtrees(
 
         // If the child bits don't match, compare...
         if (nA.existsChild(i) != nB.existsChild(i)) {
-            //int diff = nA.existsChild(i) ? getNumVoxels(levA, nA) : getNumVoxels(levB, nB);
+            // int diff = nA.existsChild(i) ? getNumVoxels(levA, nA) : getNumVoxels(levB, nB);
             if (levA == _levels - 2) {
                 unsigned int leafDiff = 0;
                 numLeaves++;
                 // If we're at the level above the leaves, simply check how different they are
                 for (int j = 0; j < 8; ++j) {
                     if (nA.existsChild(i)
-                      ? _data[levA + 1][nA.children[i]].existsChild(j)
-                      : _data[levB + 1][nB.children[i]].existsChild(j)) {
+                            ? _data[levA + 1][nA.children[i]].existsChild(j)
+                            : _data[levB + 1][nB.children[i]].existsChild(j)) {
                         accumulator++;
                         leafDiff++;
                     }
@@ -357,8 +403,8 @@ void GeomOctree::diffSubtrees(
         }
 
         // Else, both nodes have children at this index: -> compare their subtrees
-        const Node &cA = _data[childLevA][nA.children[i]];
-        const Node &cB = _data[childLevB][nB.children[i]];
+        const Node& cA = _data[childLevA][nA.children[i]];
+        const Node& cB = _data[childLevB][nB.children[i]];
 
         this->diffSubtrees(childLevA, childLevB, cA, cB, abortThreshold, accumulator, numLeaves);
         if (accumulator >= abortThreshold) {
@@ -368,7 +414,8 @@ void GeomOctree::diffSubtrees(
 }
 
 /** Checks whether two subtrees at different levels are equal under a specific symmetry similarity */
-bool GeomOctree::compareSymSubtrees(unsigned int levA, unsigned int levB, Node &nA_in, Node &nB, bool sX, bool sY, bool sZ) {
+bool GeomOctree::compareSymSubtrees(unsigned int levA, unsigned int levB, Node& nA_in, Node& nB, bool sX, bool sY, bool sZ)
+{
     // Still a WIP
     // Mirror node A
     Node nA = nA_in.mirror(sX, sY, sZ);
@@ -395,14 +442,14 @@ bool GeomOctree::compareSymSubtrees(unsigned int levA, unsigned int levB, Node &
         if (nA.existsChild(i) != nB.existsChild(i)) {
             return false;
         }
-            // Otherwise they are equal.
-            // If either one is not set, we cannot compare them further. Therefore they can be seen as equal
+        // Otherwise they are equal.
+        // If either one is not set, we cannot compare them further. Therefore they can be seen as equal
         else if (!(nA.existsChild(i) || nB.existsChild(i))) {
             continue;
         }
 
-        Node &cA = _data[childLevA][nA.children[i]];
-        Node &cB = _data[childLevB][nB.children[i]];
+        Node& cA = _data[childLevA][nA.children[i]];
+        Node& cB = _data[childLevB][nB.children[i]];
 
         // Compare their child masks...
         if (cA.childrenBitmask != cB.childrenBitmask) {
@@ -423,7 +470,8 @@ bool GeomOctree::compareSymSubtrees(unsigned int levA, unsigned int levB, Node &
 }
 
 /** Sorts nodes so that the node with the most refences is at index 0. Also updates pointers accordingly */
-std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount() {
+std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount()
+{
     /** Stolen from encoded_ssvdag.cpp */
     // histogram vector with pairs of idx, number of pointers to the nodes
     std::vector<std::pair<id_t, unsigned int>> hist;
@@ -433,10 +481,12 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount() {
 
     std::vector<std::vector<unsigned int>> refCounts(_levels);
 
-    printf("Sorting nodes based on ref count: Level "); fflush(stdout);
+    printf("Sorting nodes based on ref count: Level ");
+    fflush(stdout);
 
     for (int lev = _levels - 1; lev >= 0; --lev) {
-        printf(" %u..", lev); fflush(stdout);
+        printf(" %u..", lev);
+        fflush(stdout);
 
         hist.resize(_data[lev].size());
         hist.shrink_to_fit();
@@ -449,14 +499,14 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount() {
 
         if (lev > 0) { // Don't do it for the root node
             // count num of references in the superior level
-            for (const GeomOctree::Node &n : _data[lev - 1])
+            for (const GeomOctree::Node& n : _data[lev - 1])
                 for (int c = 0; c < 8; ++c)
-                    if (n.existsChildPointer(c)) hist[n.children[c]].second++;
+                    if (n.existsChildPointer(c))
+                        hist[n.children[c]].second++;
 
             // sort by number of references (c++11's lambdas r00lez) ;D
             std::sort(hist.begin(), hist.end(),
-                      [](std::pair< id_t, id_t > a, std::pair< id_t, id_t> b) { return a.second > b.second; }
-            );
+                [](std::pair<id_t, id_t> a, std::pair<id_t, id_t> b) { return a.second > b.second; });
         }
 
         std::vector<id_t> newIndirection(_data[lev].size());
@@ -467,7 +517,7 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount() {
         for (id_t i = 0; i < hist.size(); ++i) {
 
             if (lev != _levels - 1) {
-                GeomOctree::Node &n = _data[lev][hist[i].first];
+                GeomOctree::Node& n = _data[lev][hist[i].first];
                 for (int c = 7; c >= 0; --c) {
                     if (n.existsChild(c)) {
                         n.children[c] = indirection[n.children[c]];
@@ -500,10 +550,10 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount() {
     printf(", Total nodes\n");
 
     for (unsigned int lev = 1; lev < _levels; ++lev) {
-//        printf("- LEVEL %u, total nodes: %zu\n", lev, _data[lev].size());
+        //        printf("- LEVEL %u, total nodes: %zu\n", lev, _data[lev].size());
         std::vector<unsigned int> hist(histSize);
         for (id_t nodeIndex = 0; nodeIndex < _data[lev].size(); ++nodeIndex) {
-            hist[std::min(refCounts[lev][nodeIndex], (unsigned int) (histSize - 1))] += 1;
+            hist[std::min(refCounts[lev][nodeIndex], (unsigned int)(histSize - 1))] += 1;
         }
         printf("%u", lev);
         for (unsigned int i = 1; i < histSize; ++i) {
@@ -516,10 +566,11 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByRefCount() {
     return refCounts;
 }
 
-
 /** Sorts nodes so that the node with the most refences is at index 0. Also updates pointers accordingly */
-std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
-    printf("Sorting nodes based on effective ref count: Level "); fflush(stdout);
+std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount()
+{
+    printf("Sorting nodes based on effective ref count: Level ");
+    fflush(stdout);
     std::vector<std::vector<unsigned int>> refCounts(_levels);
     refCounts[0].emplace_back(1);
 
@@ -528,11 +579,12 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
         refCounts[lev].assign(_data[lev].size(), 0);
 
         // count num of references in the superior level
-        for (id_t nodeIndex = 0; nodeIndex < _data[lev-1].size(); ++nodeIndex) {
-            const Node &n = _data[lev - 1][nodeIndex];
+        for (id_t nodeIndex = 0; nodeIndex < _data[lev - 1].size(); ++nodeIndex) {
+            const Node& n = _data[lev - 1][nodeIndex];
             // Add the ref counts from the parent to each child. -> If same child is referenced multiple times, add multiple times
             for (int c = 0; c < 8; ++c)
-                if (n.existsChildPointer(c)) refCounts[lev][n.children[c]] += refCounts[lev - 1][nodeIndex];
+                if (n.existsChildPointer(c))
+                    refCounts[lev][n.children[c]] += refCounts[lev - 1][nodeIndex];
         }
     }
 
@@ -545,7 +597,8 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
 
     // Sort
     for (int lev = _levels - 1; lev >= 0; --lev) {
-        printf(" %u..", lev); fflush(stdout);
+        printf(" %u..", lev);
+        fflush(stdout);
 
         hist.resize(_data[lev].size());
         hist.shrink_to_fit();
@@ -559,8 +612,7 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
         if (lev > 0) { // Don't do it for the root node
             // sort by number of references (c++11's lambdas r00lez) ;D
             std::sort(hist.begin(), hist.end(),
-                      [](std::pair< GeomOctree::id_t, GeomOctree::id_t > a, std::pair< GeomOctree::id_t, GeomOctree::id_t> b) { return a.second > b.second; }
-            );
+                [](std::pair<GeomOctree::id_t, GeomOctree::id_t> a, std::pair<GeomOctree::id_t, GeomOctree::id_t> b) { return a.second > b.second; });
         }
 
         std::vector<id_t> newIndirection(_data[lev].size());
@@ -569,7 +621,7 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
         for (id_t i = 0; i < hist.size(); ++i) {
 
             if (lev != _levels - 1) {
-                GeomOctree::Node &n = _data[lev][hist[i].first];
+                GeomOctree::Node& n = _data[lev][hist[i].first];
                 for (int c = 7; c >= 0; --c) {
                     if (n.existsChild(c)) {
                         n.children[c] = indirection[n.children[c]];
@@ -590,7 +642,6 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
     }
     printf(" Done!\n");
 
-
 #if 1
     printf("DEBUG: Check how often nodes are referenced [effective ref count]\n");
     unsigned int histSize = 10; // num of ref counts to keep track of
@@ -603,10 +654,10 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
     printf(", Total nodes\n");
 
     for (unsigned int lev = 1; lev < _levels; ++lev) {
-//        printf("- LEVEL %u, total nodes: %zu\n", lev, _data[lev].size());
+        //        printf("- LEVEL %u, total nodes: %zu\n", lev, _data[lev].size());
         std::vector<unsigned int> hist(histSize);
         for (id_t nodeIndex = 0; nodeIndex < _data[lev].size(); ++nodeIndex) {
-            hist[std::min(refCounts[lev][nodeIndex], (unsigned int) (histSize - 1))] += 1;
+            hist[std::min(refCounts[lev][nodeIndex], (unsigned int)(histSize - 1))] += 1;
         }
         printf("%u", lev);
         for (unsigned int i = 1; i < histSize; ++i) {
@@ -625,13 +676,25 @@ std::vector<std::vector<unsigned int>> GeomOctree::sortByEffectiveRefCount() {
  * symmetry as well: Find symmetrically identical subtrees over all levels
  * @return
  */
-unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
+unsigned int GeomOctree::findAllSymDuplicateSubtrees()
+{
     // Still a WIP
 
-    struct MirroredNode{
-        MirroredNode() : mirrorX(false), mirrorY(false), mirrorZ(false), id(0) {}
-        MirroredNode(bool mX, bool mY, bool mZ, id_t id) :
-                mirrorX(mX), mirrorY(mY), mirrorZ(mZ), id(id) {}
+    struct MirroredNode {
+        MirroredNode()
+            : mirrorX(false)
+            , mirrorY(false)
+            , mirrorZ(false)
+            , id(0)
+        {
+        }
+        MirroredNode(bool mX, bool mY, bool mZ, id_t id)
+            : mirrorX(mX)
+            , mirrorY(mY)
+            , mirrorZ(mZ)
+            , id(id)
+        {
+        }
         bool mirrorX, mirrorY, mirrorZ;
         id_t id;
     };
@@ -647,7 +710,7 @@ unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
     // Initialize all nodes of the highest level for comparison to subtrees at other levels
     unsigned int levA = 1;
     for (id_t i = 0; i < _data[levA].size(); i++) {
-        Node &n = _data[levA][i];
+        Node& n = _data[levA][i];
         currentNodesToCheck.push_back(n);
     }
 
@@ -676,7 +739,7 @@ unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
                 for (id_t j = 0; j < _data[levB].size(); j++) {
                     numTotalComparisons++;
 
-                    Node &nB = _data[levB][j];
+                    Node& nB = _data[levB][j];
 
                     // TODO: Compare all mirrored nodes of subtree nA to original nodes of subtree nB
                     // * Compute mirrored subtrees of nA
@@ -693,8 +756,7 @@ unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
                         || compareSymSubtrees(levA, levB, nA, nB, true, true, false)
                         || compareSymSubtrees(levA, levB, nA, nB, true, false, true)
                         || compareSymSubtrees(levA, levB, nA, nB, false, true, true)
-                        || compareSymSubtrees(levA, levB, nA, nB, true, true, true)
-                            ) {
+                        || compareSymSubtrees(levA, levB, nA, nB, true, true, true)) {
                         foundMatch = true;
                         numEqualSubtrees++;
                         nodesEqualPerLevel[levA]++;
@@ -719,8 +781,8 @@ unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
 
         // Since children of a node may also be children of other nodes in a DAG,
         // we need to ensure children are only present once to the nextNodesToCheck vector
-        std::sort(nextNodesToCheck.begin(), nextNodesToCheck.end() );
-        nextNodesToCheck.erase(std::unique(nextNodesToCheck.begin(), nextNodesToCheck.end() ), nextNodesToCheck.end());
+        std::sort(nextNodesToCheck.begin(), nextNodesToCheck.end());
+        nextNodesToCheck.erase(std::unique(nextNodesToCheck.begin(), nextNodesToCheck.end()), nextNodesToCheck.end());
 
         // After all nodes for this level have been checked, swap the current and next nodes to check
         currentNodesToCheck.clear();
@@ -769,7 +831,6 @@ unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
  * - Update pointers in level above
  */
 
-
 /**
  * ToLossyDag2 Idea;
  * - Given a target percentage, like jpeg compression, merge as many closest matches until that target is reached
@@ -793,8 +854,8 @@ unsigned int GeomOctree::findAllSymDuplicateSubtrees() {
  *
  */
 
-
-void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, int includedNodeRefCount) {
+void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, int includedNodeRefCount)
+{
     // Reimplementation of toLossyDag2
     // Before starting anew:
     /*
@@ -873,7 +934,7 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
         return;
     }
 
-   auto refCounts = this->sortByEffectiveRefCount();
+    auto refCounts = this->sortByEffectiveRefCount();
     // auto refCounts = this->sortByRefCount();
 
     _nNodes = 1;
@@ -892,14 +953,14 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 
     // For every level, starting at two levels above the leaves...
     for (unsigned int lev = _levels - 2; lev > 0; --lev) {
-		_clock.restart();
-		sl::time_duration timeStamp = _clock.elapsed();
-		int stepLogger = (int)round(_data[lev].size() / 10.0f);
+        _clock.restart();
+        sl::time_duration timeStamp = _clock.elapsed();
+        int stepLogger = (int)round(_data[lev].size() / 10.0f);
 
         std::vector<cluster::Edge> edges;
 
         const unsigned int maxAllowedDiff = std::round(std::pow(_levels - lev, 2) * allowedLossyDiffFactor);
-        printf("\tMax voxels: %u. Abort at %u voxels\n", (unsigned int) std::pow(8, _levels - lev), maxAllowedDiff + 1u);
+        printf("\tMax voxels: %u. Abort at %u voxels\n", (unsigned int)std::pow(8, _levels - lev), maxAllowedDiff + 1u);
 
         unsigned int numMatchesTotal = 0;
         unsigned int numLeavesTotal = 0;
@@ -913,7 +974,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
         correspondences.resize(oldLevSize, (id_t)-1);
         uniqueNodesChecker.clear();
 
-        printf("Level %u: ", lev); fflush(stdout);
+        printf("Level %u: ", lev);
+        fflush(stdout);
 
         auto tHashStart = _clock.now();
         // Compute node hashes for this node and its children up to the level above the leaves
@@ -924,55 +986,92 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
             // FIXME: This is an ugly hack
             hashes[_levels - 3].clear();
             buildMultiMap(0, matchMaps, hashes, lev - 1, lev + 1);
+
+            size_t xxx = 0;
+            size_t yyy = 0;
+            for (uint32_t i = 0; i < 256; ++i) {
+                auto candidates = matchMaps[lev].equal_range(i);
+                auto numCandidates = std::distance(candidates.first, candidates.second);
+                xxx += numCandidates * (numCandidates - 1);
+                yyy += numCandidates;
+            }
+            printf("Num nodes: %zu\n", yyy);
+            printf("Max possible matches: %zu\n", xxx);
         }
-        // Todo: use higher match depth when lossyDiff is higher than 8 
+        // Todo: use higher match depth when lossyDiff is higher than 8
         buildMultiMap(currentMatchDepth, matchMaps, hashes, lev, lev + 1);
         _stats.lHashing += _clock.now() - tHashStart;
 
         //////// FINDING EDGES FOR CLUSTERING ////////
         // For all nodes in this level, in reverse order (starting with least referenced)
-        printf("\n\tFinding similar nodes [%i threads]... ", (int)omp_get_max_threads()); fflush(stdout);
+        printf("\n\tFinding similar nodes [%i threads]... ", (int)omp_get_max_threads());
+        fflush(stdout);
 
         auto tSimNodeStart = _clock.now();
-        // Todo: Try out #pragma omp declare reduction (merge : std::vector<int> : omp_out.insert(omp_out.end(), omp_in.begin(), omp_in.end()))
-#pragma omp parallel for schedule(dynamic,2)
-        for (int idA = (int) _data[lev].size() - 1; idA >= 0; --idA) {
 
-			if ((idA % stepLogger == 0)) {
-				printf("%.0f%%..", round(100.f * (1.0 - (float) idA / (float)_data[lev].size())));
-				fflush(stdout);
-			}
-            // only cluster nodes with 1 ref
-            if (refCounts[lev][idA] > includedNodeRefCount) continue; // should break but not sure if that affects omp stuff
-
-            const Node &n = _data[lev][idA];
-//            uint64_t nAKey = computeNodeHash(n, currentMatchDepth);
-            // Use pre-computed hash to avoid cascade of lossy error
-            uint64_t nAKey = hashes[lev][idA];
-
+        std::vector<bool> isParentOfClusterReps(_data[lev].size());
+        for (int idA = 0; idA < _data[lev].size(); ++idA) {
+            const auto& n = _data[lev][idA];
             // Don't merge nodes that are a parent of a cluster representative
             bool isParentOfClusterRep = false;
             for (int c = 0; c < 8; ++c) {
                 if (!isParentOfClusterRep && n.existsChild(c)) {
-#pragma omp critical
                     if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
                         isParentOfClusterRep = true;
                         curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
                     }
                 }
             }
-            if (isParentOfClusterRep) continue;
+            isParentOfClusterReps[idA] = isParentOfClusterRep;
+        }
+
+        // Todo: Try out #pragma omp declare reduction (merge : std::vector<int> : omp_out.insert(omp_out.end(), omp_in.begin(), omp_in.end()))
+        printf("Num items %zu\n", _data[lev].size());
+        size_t numConsidered = 0;
+        // #pragma omp parallel for schedule(dynamic, 2)
+        for (int idA = (int)_data[lev].size() - 1; idA >= 0; --idA) {
+
+            if ((idA % stepLogger == 0)) {
+                printf("%.0f%%..", round(100.f * (1.0 - (float)idA / (float)_data[lev].size())));
+                fflush(stdout);
+            }
+            // only cluster nodes with 1 ref
+            if (refCounts[lev][idA] > includedNodeRefCount)
+                continue; // should break but not sure if that affects omp stuff
+
+            const Node& n = _data[lev][idA];
+            //            uint64_t nAKey = computeNodeHash(n, currentMatchDepth);
+            // Use pre-computed hash to avoid cascade of lossy error
+            uint64_t nAKey = hashes[lev][idA];
+
+            // Don't merge nodes that are a parent of a cluster representative
+            // bool isParentOfClusterRep = false;
+            // for (int c = 0; c < 8; ++c) {
+            //    if (!isParentOfClusterRep && n.existsChild(c)) {
+            // #pragma omp critical
+            //         if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
+            //             isParentOfClusterRep = true;
+            //             curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
+            //         }
+            //     }
+            // }
+            // if (isParentOfClusterRep)
+            //     continue;
+
+            if (isParentOfClusterReps[idA])
+                continue;
 
             if (lev == _levels - 2) {
                 for (int i = 0; i < 64; ++i) {
-                    uint64_t nAKeyMod = nAKey ^(1UL << i);
+                    uint64_t nAKeyMod = nAKey ^ (uint64_t(1) << i);
                     auto candidates = matchMaps[lev].equal_range(nAKeyMod);
                     for (auto it = candidates.first; it != candidates.second; ++it) {
                         id_t idB = it->second;
-                        if (idA <= idB) continue; // don't match with itself or with previous nodes (since idB will already have been compared to idA)
-                        if (refCounts[lev][idB] > includedNodeRefCount) continue; // Only compare to other 1 ref nodes
+                        if (idA <= idB)
+                            continue; // don't match with itself or with previous nodes (since idB will already have been compared to idA)
+                        if (refCounts[lev][idB] > includedNodeRefCount)
+                            continue; // Only compare to other 1 ref nodes
 
-                        
                         // To avoid two identical edges, only add edges from low id to high id
                         // (No need to compare idB to idA and adding another edge, as it would be the same edge)
 #pragma omp critical
@@ -980,7 +1079,7 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                             numLeavesTotal++;
                             numMatchesTotal++;
                             diffTotal++;
-                            edges.emplace_back(cluster::Edge{(unsigned int) idA, idB, 1});
+                            edges.emplace_back(cluster::Edge { (unsigned int)idA, idB, 1 });
                             uniqueNodesChecker[idA] = false;
                             uniqueNodesChecker[idB] = false;
                         };
@@ -988,17 +1087,22 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                 }
             } else {
                 auto candidates = matchMaps[lev].equal_range(nAKey);
-
+                numConsidered += std::distance(candidates.first, candidates.second);
                 for (auto it = candidates.first; it != candidates.second; ++it) {
                     id_t idB = it->second;
-                    if (idA <= idB) continue; // don't match with itself or with previous nodes (since idB will already have been compared to idA)
-                    if (refCounts[lev][idB] > includedNodeRefCount) continue; // Only compare to other 1 ref nodes
+                    if (idA <= idB)
+                        continue; // don't match with itself or with previous nodes (since idB will already have been compared to idA)
+                    if (refCounts[lev][idB] > includedNodeRefCount)
+                        continue; // Only compare to other 1 ref nodes
+                    if (isParentOfClusterReps[idB])
+                        continue;
 
                     // Check how similar this node actually is: Deep comparison (expensive!!)
-                    const Node &nB = _data[lev][idB];
+                    const Node& nB = _data[lev][idB];
                     unsigned int diff = 0, numLeaves = 0;
-                    this->diffSubtrees(lev, lev, n, nB, maxAllowedDiff + 1, diff, numLeaves);
-
+                    // this->diffSubtrees(lev, lev, n, nB, maxAllowedDiff + 1, diff, numLeaves);
+                    diff = this->countVoxelDifferences(lev, idA, idB);
+                    
                     // Compare differences between children
                     // for (int c = 0; c < 8; c++) {
                     //     if (n.existsChild(c) && nB.existsChild(c)) {
@@ -1022,7 +1126,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 
                     // For subtrees with few leaf nodes, diff should be relatively lower
                     // --> If difference greater than avg amount of voxels in leaves, abort
-                    float maxAllowedSubtreeDiff = 4.0 * numLeaves; // * allowedLossyDiffFactor;
+                    // float maxAllowedSubtreeDiff = 4.0 * numLeaves; // * allowedLossyDiffFactor;
+                    float maxAllowedSubtreeDiff = std::numeric_limits<float>::max();
 #pragma omp critical
                     if (diff <= maxAllowedDiff && diff < maxAllowedSubtreeDiff) {
                         // curSimilarNodes.insert()
@@ -1033,14 +1138,14 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 
                         // Weights are similarity, so the inverse of the difference. Difference = dissimilarity
                         // Todo: Difference is currently linearly converted to similarity. Could also try sqrt or log
-                        float sim = 1.0f - (float) diff / (maxAllowedDiff + 1.0f);
+                        float sim = 1.0f - (float)diff / (maxAllowedDiff + 1.0f);
 
                         // Normalize similarity, so that a max diff is at weight 0 and 1 diff is at weight 1
                         // const float minSim = 1.0f / std::sqrt(maxDiff);
                         // float normSim = (1.0f - minSim / sim) / (1.0f - minSim);
-                        // sim *= 
+                        // sim *=
 
-                        edges.emplace_back(cluster::Edge{(unsigned int) idA, idB, sim});
+                        edges.emplace_back(cluster::Edge { (unsigned int)idA, idB, sim });
                         uniqueNodesChecker[idA] = false;
                         uniqueNodesChecker[idB] = false;
                     }
@@ -1049,23 +1154,28 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
         }
         _stats.lSimNodes += _clock.now() - tSimNodeStart;
 
+        printf("num considered = %zu\n", numConsidered);
+
         // printf("Avg num of leaves: %.2f, avg diff: %.2f", (float) numLeavesTotal / (float) numMatchesTotal, (float) diffTotal / (float) numMatchesTotal);
 
         // Clustering stage:
         // - Any node might have one or more potential matches, however, we can only pick one
         // - We prefer to match nodes with a node that is referenced more than once
         // - Then, find which nodes are potential matches the most frequently
-        printf("\n\tClustering... "); fflush(stdout);
+        printf("\n\tClustering %zu edges... ", edges.size());
+        fflush(stdout);
         auto tClusterStart = _clock.now();
         const std::vector<std::vector<unsigned int>> clusters = cluster::clusterSubgraphs(edges, lossyInflation, lev);
         _stats.lClustering += _clock.now() - tClusterStart;
-        printf(" Done! \n"); fflush(stdout);
+        printf(" Done (%zu clusters)! \n", clusters.size());
+        fflush(stdout);
 
         //////// COMPARING CLUSTERS TO OTHER NODES ////////
         for (id_t idA = 0; idA < _data[lev].size(); ++idA) {
             // Add all nodes with > threshold ref count to uniqueNodes
-            if (refCounts[lev][idA] <= includedNodeRefCount && uniqueNodesChecker.find(idA) != uniqueNodesChecker.end()) continue;
-            correspondences[idA] = (id_t) uniqueNodes.size(); // the correspondence is this node itself
+            if (refCounts[lev][idA] <= includedNodeRefCount && uniqueNodesChecker.find(idA) != uniqueNodesChecker.end())
+                continue;
+            correspondences[idA] = (id_t)uniqueNodes.size(); // the correspondence is this node itself
             uniqueNodes.push_back(_data[lev][idA]);
         }
 
@@ -1076,12 +1186,12 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
         size_t nTotalVoxelDiff = 0;
         for (auto c : clusters) {
             _stats.nClusteredNodes += c.size();
-            
+
             // Compute total difference between all nodes in this cluster to its representative
-            const auto &rep = _data[lev][c[0]];
+            const auto& rep = _data[lev][c[0]];
             for (id_t nbID : c) {
                 unsigned int diff = 0, numLeaves = 0;
-                const auto &nB = _data[lev][nbID];
+                const auto& nB = _data[lev][nbID];
                 this->diffSubtrees(lev, lev, rep, nB, maxAllowedDiff + 1, diff, numLeaves);
                 // Voxel diff increases with number of references
                 int numRefs = refCounts[lev][nbID];
@@ -1149,8 +1259,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 
         /////////////////////////////////
         //// Update all pointers in the level above
-        for (id_t i = 0; i < _data[lev-1].size(); i++) {
-            Node * bn = &_data[lev-1][i];
+        for (id_t i = 0; i < _data[lev - 1].size(); i++) {
+            Node* bn = &_data[lev - 1][i];
             // For all children...
             for (int j = 0; j < 8; j++) {
                 // If this child exists...
@@ -1175,21 +1285,19 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 #endif
 
     this->toDAG(false); // filter out new identical nodes (small probability, but might as well check)
-
 }
-
 
 ////////////////////////////////////////////////////////////////////
 ////////////////////// CROSS LEVEL MERGING /////////////////////////
 ////////////////////////////////////////////////////////////////////
-
 
 /**
  * @brief mergeAcrossAllLevels Brute force search over all levels, looking for equal subtrees and merging them
  * Goal: Research to see what the benefit of multi-level merging would be.
  * Just for SVDAGs now, but SSVDAGs would likely perform better - harder to check though
  */
-unsigned int GeomOctree::mergeAcrossAllLevels() {
+unsigned int GeomOctree::mergeAcrossAllLevels()
+{
     /*
     std::function<std::string (const GeomOctree::Node &node, unsigned int depth)> computeNodeString;
     computeNodeString = [&](const GeomOctree::Node &node, unsigned int depth) {
@@ -1229,28 +1337,28 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
 
     /*
     // Prints all childmasks of two subtrees
-	std::function<int (unsigned int levA, unsigned int levB,
-		const GeomOctree::Node &nA, const GeomOctree::Node &nB)> getMasks;
-	getMasks = [&](unsigned int levA, unsigned int levB, const GeomOctree::Node &nA, const GeomOctree::Node &nB) {
-		printf("%u %u\n", nA.childrenBitmask, nB.childrenBitmask);
-		if (levA == _levels - 1) {
-			return 0;
-		}
-		for (int c = 0; c < 8; ++c) {
-			printf("C%u: ", c);
-			if (nA.existsChild(c)) {
-				getMasks(levA + 1, levB + 1, _data[levA + 1][nA.children[c]], _data[levB + 1][nB.children[c]]);
-			} else if (nB.existsChild(c)) {
-				printf("X %u !!! !!! !!!\n", _data[levB + 1][nB.children[c]].childrenBitmask);
-			} else {
-				printf("X X\n");
-			}
-		}
-		return 0;
-	};
+        std::function<int (unsigned int levA, unsigned int levB,
+                const GeomOctree::Node &nA, const GeomOctree::Node &nB)> getMasks;
+        getMasks = [&](unsigned int levA, unsigned int levB, const GeomOctree::Node &nA, const GeomOctree::Node &nB) {
+                printf("%u %u\n", nA.childrenBitmask, nB.childrenBitmask);
+                if (levA == _levels - 1) {
+                        return 0;
+                }
+                for (int c = 0; c < 8; ++c) {
+                        printf("C%u: ", c);
+                        if (nA.existsChild(c)) {
+                                getMasks(levA + 1, levB + 1, _data[levA + 1][nA.children[c]], _data[levB + 1][nB.children[c]]);
+                        } else if (nB.existsChild(c)) {
+                                printf("X %u !!! !!! !!!\n", _data[levB + 1][nB.children[c]].childrenBitmask);
+                        } else {
+                                printf("X X\n");
+                        }
+                }
+                return 0;
+        };
     */
 
-	auto crossMergeStart = _clock.now();
+    auto crossMergeStart = _clock.now();
 
     ///////////////////////////////////////////////////////////////
     /// Building multi-maps for finding potential matches faster //
@@ -1339,8 +1447,8 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
             }
             curNodeIndex++;
 
-            Node &nA = _data[levA][idA];
-//            uint64_t nAKey = computeNodeHash(nA, currentMatchDepth, hashes[levA + 1]);
+            Node& nA = _data[levA][idA];
+            //            uint64_t nAKey = computeNodeHash(nA, currentMatchDepth, hashes[levA + 1]);
             uint64_t nAKey = hashes[levA][idA];
 
             bool foundMatch = false;
@@ -1358,7 +1466,7 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
                 for (auto it = matchResult.first; it != matchResult.second; ++it) {
                     id_t j = it->second;
                     numTotalComparisons++;
-                    Node &nB = _data[levB][j];
+                    Node& nB = _data[levB][j];
 
                     for (int i = 0; i < _levels; ++i) {
                         nodesInCurSubtree[i].clear();
@@ -1378,13 +1486,13 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
                         for (int levRem = 0; levRem < _levels; ++levRem) { // levels below the root
                             multiLevelCorrespondences[levRem].insert(nodesInCurSubtree[levRem].begin(), nodesInCurSubtree[levRem].end());
                         }
-                        //printf("-OK MATCH-");
+                        // printf("-OK MATCH-");
                         break;
                     } else if (maxMatchDepth == currentMatchDepth) {
-//                        std::cout << std::endl << computeNodeString(nA, currentMatchDepth) << std::endl;
-//                        std::cout << computeNodeString(nB, currentMatchDepth) << std::endl;
-////                        getMasks(levA, levB, nA, nB);
-//                        printf("Matches correspond at same depth level, but no equal?!?!\n");
+                        //                        std::cout << std::endl << computeNodeString(nA, currentMatchDepth) << std::endl;
+                        //                        std::cout << computeNodeString(nB, currentMatchDepth) << std::endl;
+                        ////                        getMasks(levA, levB, nA, nB);
+                        //                        printf("Matches correspond at same depth level, but no equal?!?!\n");
                         hashCollisions++;
                     }
                 }
@@ -1393,7 +1501,7 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
                 }
             }
             if (hashCollisions > 0) {
-//                printf("Hash collisions: %i\n", hashCollisions);
+                //                printf("Hash collisions: %i\n", hashCollisions);
                 totHashCollisions += hashCollisions;
             }
             if (!foundMatch) {
@@ -1410,13 +1518,12 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
 
         _stats.crossMergeTime = _clock.now() - crossMergeStart;
 
-        printf(" -> %lu (%.0f%%) [%s]\n", _data[levA].size() - multiLevelCorrespondences[levA].size(), 100 * multiLevelCorrespondences[levA].size() / (float) _data[levA].size(), sl::human_readable_duration(_stats.crossMergeTime).c_str());
+        printf(" -> %lu (%.0f%%) [%s]\n", _data[levA].size() - multiLevelCorrespondences[levA].size(), 100 * multiLevelCorrespondences[levA].size() / (float)_data[levA].size(), sl::human_readable_duration(_stats.crossMergeTime).c_str());
 
         // After all nodes for this level have been checked, swap the current and next nodes to check
         currentNodesToCheck.clear();
         currentNodesToCheck.swap(nextNodesToCheck);
     }
-
 
     printf("Total hash collisions: %i\n", totHashCollisions);
 
@@ -1451,8 +1558,8 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
         int numRemained = 0;
 
         // Update all pointers in the level above
-        for (id_t nodeIndex = 0; nodeIndex < _data[lev-1].size(); ++nodeIndex) {
-            Node *node = &_data[lev - 1][nodeIndex];
+        for (id_t nodeIndex = 0; nodeIndex < _data[lev - 1].size(); ++nodeIndex) {
+            Node* node = &_data[lev - 1][nodeIndex];
             // For all children...
             for (int j = 0; j < 8; j++) {
                 // If this child exists...
@@ -1474,16 +1581,15 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
             }
         }
 
-
         // Update pointers from lower levels to nodes in this level
         for (unsigned int levLow = _levels - 2; levLow >= lev; --levLow) {
             for (id_t nodeIndex = 0; nodeIndex < _data[levLow].size(); ++nodeIndex) {
-                Node *node = &_data[levLow][nodeIndex];
+                Node* node = &_data[levLow][nodeIndex];
                 // For all children...
                 for (int j = 0; j < 8; j++) {
                     // If this node from a lower level points a node in the current level...
                     if (node->existsChild(j) && node->childLevels[j] == lev) {
-                        if (correspondences[node->children[j]] == (id_t) -1) {
+                        if (correspondences[node->children[j]] == (id_t)-1) {
                             printf("\t\t- Missing correspondence on lev %u: Node %u, child %u\n", levLow, nodeIndex, j);
                         }
 
@@ -1498,7 +1604,6 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
     }
 
     _stats.nNodesDAG = _nNodes;
-
 
     /////////////////////////////////
     /// Done: Print the results!   //
@@ -1515,51 +1620,61 @@ unsigned int GeomOctree::mergeAcrossAllLevels() {
     printf("Total number of nodes that was removed: %u / %zu (%.2f%%)\n ", totalElimNodes, prevNNodes, (100 * totalElimNodes / double(prevNNodes)));
     _stats.nCrossLevelMerged = totalElimNodes;
 
-//    printf("Indirect subtree feasibility: How many unique pointers there are to other levels, per level\n");
-//    Todo: Should use this to check how limiting it is to only have pointers to 1 or 2 levels instead of all
-//    for (unsigned int lev = 0; lev < _levels; ++lev) {
-//        std::vector<std::set<id_t>> uniquePointers(_levels);
-//        std::vector<unsigned int> numPointers(_levels);
-//        for (const auto &node : _data[lev]) {
-//            for (int c = 0; c < 8; ++c) {
-//                if (node.childLevels[c] != lev + 1) {
-//                    uniquePointers[node.childLevels[c]].insert(node.children[c]);
-//                    numPointers[node.childLevels[c]]++;
-//                }
-//            }
-//        }
-//
-//        unsigned int totalNumUniquePointers = 0;
-//        unsigned int totalNumPointers = 0;
-//        for (unsigned int lev2 = 0; lev2 <= lev; ++lev2) {
-//            printf("    L%u -> L%u: Unique / total = %zu / %u\n", lev, lev2, uniquePointers[lev2].size(), numPointers[lev2]);
-//            totalNumUniquePointers += uniquePointers[lev2].size();
-//            totalNumPointers += numPointers[lev2];
-//        }
-//        printf("  L%u total: Unique / total = %u / %u\n", lev, totalNumUniquePointers, totalNumPointers);
-//    }
-
+    //    printf("Indirect subtree feasibility: How many unique pointers there are to other levels, per level\n");
+    //    Todo: Should use this to check how limiting it is to only have pointers to 1 or 2 levels instead of all
+    //    for (unsigned int lev = 0; lev < _levels; ++lev) {
+    //        std::vector<std::set<id_t>> uniquePointers(_levels);
+    //        std::vector<unsigned int> numPointers(_levels);
+    //        for (const auto &node : _data[lev]) {
+    //            for (int c = 0; c < 8; ++c) {
+    //                if (node.childLevels[c] != lev + 1) {
+    //                    uniquePointers[node.childLevels[c]].insert(node.children[c]);
+    //                    numPointers[node.childLevels[c]]++;
+    //                }
+    //            }
+    //        }
+    //
+    //        unsigned int totalNumUniquePointers = 0;
+    //        unsigned int totalNumPointers = 0;
+    //        for (unsigned int lev2 = 0; lev2 <= lev; ++lev2) {
+    //            printf("    L%u -> L%u: Unique / total = %zu / %u\n", lev, lev2, uniquePointers[lev2].size(), numPointers[lev2]);
+    //            totalNumUniquePointers += uniquePointers[lev2].size();
+    //            totalNumPointers += numPointers[lev2];
+    //        }
+    //        printf("  L%u total: Unique / total = %u / %u\n", lev, totalNumUniquePointers, totalNumPointers);
+    //    }
 
     return totalElimNodes;
 }
 
-
-
-void GeomOctree::symMergeAcrossAllLevels() {
+void GeomOctree::symMergeAcrossAllLevels()
+{
     // Needs to be in SDAG state
 
     if (_state == S_SDAG) {
-        printf("* Transforming SDAG -> CSDAG ... "); fflush(stdout);
+        printf("* Transforming SDAG -> CSDAG ... ");
+        fflush(stdout);
     } else {
         printf("ERROR! This is not a SDAG!\n");
         return;
     }
 
     // Build multi-map of MirrorNodes
-    struct MirroredNode{
-        MirroredNode() : mirrorX(false), mirrorY(false), mirrorZ(false), id(0) {}
-        MirroredNode(bool mX, bool mY, bool mZ, id_t id) :
-                mirrorX(mX), mirrorY(mY), mirrorZ(mZ), id(id) {}
+    struct MirroredNode {
+        MirroredNode()
+            : mirrorX(false)
+            , mirrorY(false)
+            , mirrorZ(false)
+            , id(0)
+        {
+        }
+        MirroredNode(bool mX, bool mY, bool mZ, id_t id)
+            : mirrorX(mX)
+            , mirrorY(mY)
+            , mirrorZ(mZ)
+            , id(id)
+        {
+        }
         bool mirrorX, mirrorY, mirrorZ;
         id_t id;
     };
@@ -1582,13 +1697,12 @@ void GeomOctree::symMergeAcrossAllLevels() {
                 for (int symIndex = 0; symIndex < 8; ++symIndex) {
                     // Todo: Check invariance
                     uint64_t key = 0; // computeNodeKey(_data[lev][nodeIndex], depth);
-//                    matchMaps[symIndex][lev].insert(std::make_pair(key, nodeIndex));
+                    //                    matchMaps[symIndex][lev].insert(std::make_pair(key, nodeIndex));
                 }
             }
         }
         printf("Done!]");
     };
-
 
     unsigned int currentMatchDepth = _levels / 2;
 
@@ -1610,7 +1724,7 @@ void GeomOctree::symMergeAcrossAllLevels() {
         }
 
         for (unsigned int idA = 0; idA < _data[levA].size(); ++idA) {
-            Node &nA = _data[levA][idA];
+            Node& nA = _data[levA][idA];
             // Todo: Check if already matched through a parent node
 
             bool foundMatch = false;
@@ -1618,37 +1732,36 @@ void GeomOctree::symMergeAcrossAllLevels() {
             uint64_t nAKey = 0; // computeNodeKey(nA, currentMatchDepth);
             for (unsigned int levB = 0; levB < levA; ++levB) {
                 for (int symIndex = 0; symIndex < 8; ++symIndex) {
-//                    auto matchResult = matchMaps[symIndex][levB].equal_range(nAKey);
-//                    for (auto it = matchResult.first; it != matchResult.second; ++it) {
-//                        id_t idB = it->second;
-//                        bool areSubtreesEqual = false; // compareSymSubtrees(levA, levB, nA, nB, nodesInCurSubtree);
-//                        if (areSubtreesEqual) {
-//                            foundMatch = true;
-//                            multiLevelCorrespondences[levA][idA] = std::make_pair(levB, std::make_pair(idB, symIndex));
-//                            // Append all nodes in this subtree to the nodes that can be removed
-//                            for (int levRem = 0; levRem < _levels; ++levRem) { // levels below the root
-//                                // Todo: take into account mirror bits of child pointers
-////                                multiLevelCorrespondences[levRem].insert(nodesInCurSubtree[levRem].begin(), nodesInCurSubtree[levRem].end());
-//                            }
-//                            break;
-//                        }
-//                    }
-//                    if (foundMatch) break;
+                    //                    auto matchResult = matchMaps[symIndex][levB].equal_range(nAKey);
+                    //                    for (auto it = matchResult.first; it != matchResult.second; ++it) {
+                    //                        id_t idB = it->second;
+                    //                        bool areSubtreesEqual = false; // compareSymSubtrees(levA, levB, nA, nB, nodesInCurSubtree);
+                    //                        if (areSubtreesEqual) {
+                    //                            foundMatch = true;
+                    //                            multiLevelCorrespondences[levA][idA] = std::make_pair(levB, std::make_pair(idB, symIndex));
+                    //                            // Append all nodes in this subtree to the nodes that can be removed
+                    //                            for (int levRem = 0; levRem < _levels; ++levRem) { // levels below the root
+                    //                                // Todo: take into account mirror bits of child pointers
+                    ////                                multiLevelCorrespondences[levRem].insert(nodesInCurSubtree[levRem].begin(), nodesInCurSubtree[levRem].end());
+                    //                            }
+                    //                            break;
+                    //                        }
+                    //                    }
+                    //                    if (foundMatch) break;
                 }
-                if (foundMatch) break;
+                if (foundMatch)
+                    break;
             }
         }
     }
 }
 
-
-
 ////////////////////////////////////////////////////////////////////
 ////////////////// EXPLOITING HIDDEN GEOMETRY //////////////////////
 ////////////////////////////////////////////////////////////////////
 
-
-void GeomOctree::hiddenGeometryFloodfill() {
+void GeomOctree::hiddenGeometryFloodfill()
+{
     printf("Starting flood fill...\n");
     if (_state != S_SVO) {
         printf("Not in SVO format, aborting!\n");
@@ -1667,62 +1780,76 @@ void GeomOctree::hiddenGeometryFloodfill() {
     // Contains all info to find a node and a reference to its parent
     struct TravNode {
         TravNode(std::shared_ptr<TravNode> prnt, id_t pIdx, ChildrenIdx i, unsigned int l)
-                : parent(std::move(std::move(prnt))), parentIdx(pIdx), childIdx(i), level(l) {}
+            : parent(std::move(std::move(prnt)))
+            , parentIdx(pIdx)
+            , childIdx(i)
+            , level(l)
+        {
+        }
         std::shared_ptr<TravNode> parent;
         id_t parentIdx;
         ChildrenIdx childIdx;
         unsigned int level;
 
-        bool operator<(const TravNode &other) const {
+        bool operator<(const TravNode& other) const
+        {
             return level < other.level
-                   || parentIdx < other.parentIdx
-                   || childIdx < other.childIdx;
+                || parentIdx < other.parentIdx
+                || childIdx < other.childIdx;
         }
     };
 
     TravNode nullTravNode(nullptr, 0, NXNYNZ, -1);
 
-    auto getNode = [&](const TravNode &tn) {
-        if (tn.level == 0) return _data[0][0]; // Root node
-//        assert((tn.level < 0 || tn.level >= _levels));
+    auto getNode = [&](const TravNode& tn) {
+        if (tn.level == 0)
+            return _data[0][0]; // Root node
+        //        assert((tn.level < 0 || tn.level >= _levels));
         Node& p = _data[tn.level - 1][tn.parentIdx];
-        return (Node&) _data[tn.level][p.children[tn.childIdx]];
+        return (Node&)_data[tn.level][p.children[tn.childIdx]];
     };
 
     // A leaf is not represented with a node, it is a child of a node with a child bitmask of 0 or at max level (_levels)
-    auto isLeaf = [&](const TravNode &tn) {
-        if (tn.level == _levels) return true;
+    auto isLeaf = [&](const TravNode& tn) {
+        if (tn.level == _levels)
+            return true;
         // if tn points to an actual node, and that node has no children, then it's a leaf
         // if there is a child pointer in the parent, it's a leaf it it has no children. Else, it's a leaf
-        if (getNode(*(tn.parent)).existsChildPointer(tn.childIdx)) return !getNode(tn).hasChildren();
+        if (getNode(*(tn.parent)).existsChildPointer(tn.childIdx))
+            return !getNode(tn).hasChildren();
         return true;
     };
 
     // Child indices with same dir (e.g. NX -> NXNYNZ, NXPYNZ, NXNYPZ, NXPYPZ)
     // Returns one of the 4 child indices in the given direction of a node (i between 0 < 4)
     auto getChildIndexForDirection = [](DirectionIdx dir, unsigned int i) {
-        int     /* NX */    childIdx = i; // NX
-        if      (dir % 3 == NY) childIdx = i + 2 * (i / 2);
-        else if (dir % 3 == NZ) childIdx = i * 2;
-        if      (dir == PX) childIdx += 4;
-        else if (dir == PY) childIdx += 2;
-        else if (dir == PZ) childIdx += 1;
+        int /* NX */ childIdx = i; // NX
+        if (dir % 3 == NY)
+            childIdx = i + 2 * (i / 2);
+        else if (dir % 3 == NZ)
+            childIdx = i * 2;
+        if (dir == PX)
+            childIdx += 4;
+        else if (dir == PY)
+            childIdx += 2;
+        else if (dir == PZ)
+            childIdx += 1;
         return childIdx;
     };
 
-
     // Neighbour finding algorithm: https://geidav.wordpress.com/2017/12/02/advanced-octrees-4-finding-neighbor-nodes/
 
-    std::function<TravNode (const TravNode &tn, DirectionIdx dir)> getNeighbourGrtrEqSz;
-    getNeighbourGrtrEqSz = [&](const TravNode &tn, const DirectionIdx dir) {
-        if (tn.level == 0) return nullTravNode; // Root node, cannot go further up
+    std::function<TravNode(const TravNode& tn, DirectionIdx dir)> getNeighbourGrtrEqSz;
+    getNeighbourGrtrEqSz = [&](const TravNode& tn, const DirectionIdx dir) {
+        if (tn.level == 0)
+            return nullTravNode; // Root node, cannot go further up
 
         // For each of the 4 children on a side
         for (int i = 0; i < 4; ++i) {
             // If tn is a child at positive side, return a neighbour within the same parent at the opposite side, vice versa
-            auto oppositeSideChildIdx = (ChildrenIdx) getChildIndexForDirection((DirectionIdx) ((dir + 3) % 6), i);
+            auto oppositeSideChildIdx = (ChildrenIdx)getChildIndexForDirection((DirectionIdx)((dir + 3) % 6), i);
             if (tn.childIdx == oppositeSideChildIdx) {
-                auto curSideChildIdx = (ChildrenIdx) getChildIndexForDirection((DirectionIdx) dir, i);
+                auto curSideChildIdx = (ChildrenIdx)getChildIndexForDirection((DirectionIdx)dir, i);
                 return TravNode(tn.parent, tn.parentIdx, curSideChildIdx, tn.level);
             }
         }
@@ -1730,16 +1857,17 @@ void GeomOctree::hiddenGeometryFloodfill() {
         // Else, try to find the neighbour of the parent in this direction
         TravNode pNb = getNeighbourGrtrEqSz(*(tn.parent), dir);
         // Return it if it's the nullNode, or it's a leaf
-        if (pNb.parent == nullptr || isLeaf(pNb)) return pNb;
+        if (pNb.parent == nullptr || isLeaf(pNb))
+            return pNb;
 
         auto pNbPtr = std::make_shared<TravNode>(pNb);
         id_t pNbIdx = _data[pNb.level - 1][pNb.parentIdx].children[pNb.childIdx];
         // If the neighbour of the parent is not a leaf node, return its child that is the closest to the given node
         // For each of the 4 children on this side of the node...
         for (int i = 0; i < 4; ++i) {
-            auto curSideChildIdx = (ChildrenIdx) getChildIndexForDirection((DirectionIdx) dir, i);
+            auto curSideChildIdx = (ChildrenIdx)getChildIndexForDirection((DirectionIdx)dir, i);
             if (tn.childIdx == curSideChildIdx) {
-                auto oppositeSideChildIdx = (ChildrenIdx) getChildIndexForDirection((DirectionIdx) ((dir + 3) % 6), i);
+                auto oppositeSideChildIdx = (ChildrenIdx)getChildIndexForDirection((DirectionIdx)((dir + 3) % 6), i);
                 return TravNode(pNbPtr, pNbIdx, oppositeSideChildIdx, pNb.level + 1);
             }
         }
@@ -1748,11 +1876,13 @@ void GeomOctree::hiddenGeometryFloodfill() {
     };
 
     static std::stack<TravNode> candidates;
-    auto getNeighboursSmSz = [&](const TravNode &tn, const TravNode &tnNb, const DirectionIdx dir, std::vector<TravNode> &neighbours) {
-        if (tnNb.parent != nullptr) candidates.push(tnNb);
+    auto getNeighboursSmSz = [&](const TravNode& tn, const TravNode& tnNb, const DirectionIdx dir, std::vector<TravNode>& neighbours) {
+        if (tnNb.parent != nullptr)
+            candidates.push(tnNb);
 
         while (!candidates.empty()) {
-            const TravNode &can = candidates.top(); candidates.pop();
+            const TravNode& can = candidates.top();
+            candidates.pop();
 
             if (isLeaf(can)) {
                 // if it's a leaf, add as a neighbour
@@ -1765,20 +1895,20 @@ void GeomOctree::hiddenGeometryFloodfill() {
 
                 // For each of the 4 children on a side of the node, add candidates
                 for (int i = 0; i < 4; ++i) {
-                    auto oppositeSideChildIdx = (ChildrenIdx) getChildIndexForDirection((DirectionIdx) ((dir + 3) % 6), i);
+                    auto oppositeSideChildIdx = (ChildrenIdx)getChildIndexForDirection((DirectionIdx)((dir + 3) % 6), i);
                     candidates.push(TravNode(canPtr, canIdx, oppositeSideChildIdx, newLev));
                 }
             }
         }
     };
 
-    auto getNeighbours = [&](const TravNode &tn, std::vector<TravNode> &neighbours) {
+    auto getNeighbours = [&](const TravNode& tn, std::vector<TravNode>& neighbours) {
         // Get neighbours for all directions
         for (int dir = 0; dir <= PZ; ++dir) {
             // Get the neighbour directly next to it in this direction
-            const TravNode &nb = getNeighbourGrtrEqSz(tn, (DirectionIdx) dir);
+            const TravNode& nb = getNeighbourGrtrEqSz(tn, (DirectionIdx)dir);
             // find the leaf nodes on the side of the input node inside the neighbour
-            getNeighboursSmSz(tn, nb, (DirectionIdx) dir, neighbours);
+            getNeighboursSmSz(tn, nb, (DirectionIdx)dir, neighbours);
         }
     };
 
@@ -1791,7 +1921,7 @@ void GeomOctree::hiddenGeometryFloodfill() {
     ChildrenIdx startIdx = PXPYPZ; // Start flood fill at the top right of the scene
     id_t curNodeIdx = 0;
     for (unsigned int lev = 0; lev < _levels; ++lev) {
-        Node &node = _data[lev][curNodeIdx];
+        Node& node = _data[lev][curNodeIdx];
 
         // Create new TravNode containing parent info
         TravNode curNode(prevParent, curNodeIdx, startIdx, lev + 1);
@@ -1799,7 +1929,6 @@ void GeomOctree::hiddenGeometryFloodfill() {
         curNodeIdx = _data[lev][curNodeIdx].children[startIdx];
         // Replace the start node with its child
         startTrav = curNode;
-
 
         // Stop if no child is to be found
         if (!node.existsChildPointer(startIdx)) {
@@ -1824,14 +1953,15 @@ void GeomOctree::hiddenGeometryFloodfill() {
     unsigned int numOutsideLeafs = 0;
 
     while (!queue.empty()) {
-        const TravNode travNode = queue.top(); queue.pop();
+        const TravNode travNode = queue.top();
+        queue.pop();
 
         // For all neighbours
         neighbours.clear();
         getNeighbours(travNode, neighbours);
-        for (const auto &nbTravNode : neighbours) {
+        for (const auto& nbTravNode : neighbours) {
 
-            const Node &nbP = getNode(*(nbTravNode.parent)); // neighbour parent
+            const Node& nbP = getNode(*(nbTravNode.parent)); // neighbour parent
             // Node should be checked if 1. not intersects with geometry and 2. not already marked as outside
             if (!nbP.getChildOutsideBit(nbTravNode.childIdx)) {
                 // Any neighbour of an outside node is also outside, as nodes on a surface also count as outside
@@ -1840,7 +1970,7 @@ void GeomOctree::hiddenGeometryFloodfill() {
                     // Add to queue to visit next
                     queue.push(nbTravNode);
                     // mark as being outside of any geometry in parent
-    //                nbP.setChildOutsideBit(nbTravNode.childIdx);
+                    //                nbP.setChildOutsideBit(nbTravNode.childIdx);
                     numOutsideLeafs++;
                 }
             }
@@ -1853,7 +1983,7 @@ void GeomOctree::hiddenGeometryFloodfill() {
     for (int lev = _levels - 2; lev >= 0; --lev) {
         int outsideNodes = 0;
         for (id_t nodeId = 0; nodeId < _data[lev].size(); ++nodeId) {
-            Node &n = _data[lev][nodeId];
+            Node& n = _data[lev][nodeId];
             for (int c = 0; c < 8; ++c) {
                 if (n.existsChildPointer(c) && !_data[lev + 1][n.children[c]].isInside()) {
                     _data[lev][nodeId].setChildOutsideBit(c);
@@ -1861,9 +1991,8 @@ void GeomOctree::hiddenGeometryFloodfill() {
                 }
             }
         }
-        printf("Level %i: %.2f%% of SVO nodes outside\n", lev + 1, 100.0 * outsideNodes / (float) _data[lev + 1].size());
+        printf("Level %i: %.2f%% of SVO nodes outside\n", lev + 1, 100.0 * outsideNodes / (float)_data[lev + 1].size());
     }
-
 
     // Check to see if floodfill works: Set all inside nodes to bitmask with 1
 #if 0
@@ -1886,16 +2015,17 @@ void GeomOctree::hiddenGeometryFloodfill() {
 
 #endif
 
-
     printf("Done with flood fill! %u leaves outside of geometry\n", numOutsideLeafs);
 }
 
-void GeomOctree::toHiddenGeometryDAG() {
+void GeomOctree::toHiddenGeometryDAG()
+{
 
     // Same as normal DAG, but ignore the nodes that are inside of geometry
     // Also compare with most common referenced nodes first
 
-    printf("* Performing hidden geometry exploitation... "); fflush(stdout);
+    printf("* Performing hidden geometry exploitation... ");
+    fflush(stdout);
 
     // Subtree comparison
     // Option 1.
@@ -1910,7 +2040,7 @@ void GeomOctree::toHiddenGeometryDAG() {
      * Plan:
      * * Create hash map for each option where a child node is inside
      * If a node is used a are reprsentative, it can no longer be used in
-     * 
+     *
      * let's say we use 1 multimap, we know all hashes
      * Looking for matches for each node nA:
      * - Compute hash for every option of nodes inside to be outside
@@ -1919,19 +2049,18 @@ void GeomOctree::toHiddenGeometryDAG() {
      *      - Which will replace the other?
      *      - Pick the one which has the highest probability of matching with other nodes: The most inside Nodes
      *      - Mark node as 'protected': Can't be replaced by other node
-     *      
-     * 
+     *
+     *
      */
 
-
-
-    printf(" * - Preparing hash maps:"); fflush(stdout);
+    printf(" * - Preparing hash maps:");
+    fflush(stdout);
     // For every combination of hidden child masks (256) > For every level > For every node
     std::vector<std::multimap<uint64_t, id_t>> matchMaps;
     std::vector<std::vector<uint64_t>> hashes;
 
     // This adds hashes for each option of inside hidden children to be
-//    buildHiddenGeomMultiMap(matchMaps, hashes);
+    //    buildHiddenGeomMultiMap(matchMaps, hashes);
 
     printf("\n");
 
@@ -1954,46 +2083,50 @@ void GeomOctree::toHiddenGeometryDAG() {
         uniqueNodes.shrink_to_fit();
         correspondences.clear();
         correspondences.resize(oldLevSize);
-        std::fill(correspondences.begin(), correspondences.end(), (id_t) - 1);
+        std::fill(correspondences.begin(), correspondences.end(), (id_t)-1);
 
         // For all nodes in this level...
         // Todo: compare to most referenced first?
         for (id_t nodeIndex = 0; nodeIndex < _data[lev].size(); nodeIndex++) {
             Node n = _data[lev][nodeIndex];
-            if (!n.hasChildren()) continue; // skip empty nodes
-            if (correspondences[nodeIndex] != (id_t) - 1) continue; // skip nodes with an existing correspondence
-            if (unresolvedCorrespondences.find(nodeIndex) != unresolvedCorrespondences.end()) continue;
-//            if (lev == 1) {
-//                printf("Node %i has hash %u", i, hidChildHashes[i][lev][0])
-//            }
+            if (!n.hasChildren())
+                continue; // skip empty nodes
+            if (correspondences[nodeIndex] != (id_t)-1)
+                continue; // skip nodes with an existing correspondence
+            if (unresolvedCorrespondences.find(nodeIndex) != unresolvedCorrespondences.end())
+                continue;
+            //            if (lev == 1) {
+            //                printf("Node %i has hash %u", i, hidChildHashes[i][lev][0])
+            //            }
 
             // Todo: Should apply clustering here, or at least find the best candidate
             // If this node is already used as a unique node, skip it
-//            if (std::find(correspondences.begin(), correspondences.end(), i) != correspondences.end()) {
-//                continue;
-//            }
+            //            if (std::find(correspondences.begin(), correspondences.end(), i) != correspondences.end()) {
+            //                continue;
+            //            }
 
-//            uint64_t hash = hashes[lev][nodeIndex];
+            //            uint64_t hash = hashes[lev][nodeIndex];
 
             // Todo: Again, for each hash option, look up candidates
             // Merge with one that
-//            for (int h = 0; h < 256; h++) {
-//                auto candidates = matchMaps[lev].equal_range(hash);
-//                for (auto it = candidates.first; it != candidates.second; ++it) {
-//                    id_t matchId = it->second;
-//                    if (matchId != i) {
-//                        // Todo: Deep comparison?
-//                        foundMatch = true;
-//                        correspondences[i] = matchId; // store duplicate node
-//                        break;
-//                    }
-//                }
-//                if (foundMatch) break;
-//            }
+            //            for (int h = 0; h < 256; h++) {
+            //                auto candidates = matchMaps[lev].equal_range(hash);
+            //                for (auto it = candidates.first; it != candidates.second; ++it) {
+            //                    id_t matchId = it->second;
+            //                    if (matchId != i) {
+            //                        // Todo: Deep comparison?
+            //                        foundMatch = true;
+            //                        correspondences[i] = matchId; // store duplicate node
+            //                        break;
+            //                    }
+            //                }
+            //                if (foundMatch) break;
+            //            }
 
             // TODO: This is a brute force approach, just testing whether it works
             for (id_t idB = 0; idB < _data[lev].size(); idB++) {
-                if (nodeIndex == idB) continue;
+                if (nodeIndex == idB)
+                    continue;
 
                 Node nB = _data[lev][idB];
                 // Merge nodes if their visible children overlap. Choose node with least hidden children
@@ -2011,7 +2144,7 @@ void GeomOctree::toHiddenGeometryDAG() {
                 id_t replaced = idB;
 
                 if (overlapVisChildren == visibleChildrenA) { // Node A could replace node B
-                   couldReplace = true;
+                    couldReplace = true;
                 } else if (overlapVisChildren == visibleChildrenB) { // Node B could replace node A
                     couldReplace = true;
                     replacer = idB;
@@ -2019,8 +2152,8 @@ void GeomOctree::toHiddenGeometryDAG() {
                 }
 
                 if (couldReplace) {
-                    const Node &replacerNode = _data[lev][replacer];
-                    const Node &replacedNode = _data[lev][replaced];
+                    const Node& replacerNode = _data[lev][replacer];
+                    const Node& replacedNode = _data[lev][replaced];
                     bool identicalVisibleChildren = true;
                     for (int c = 0; c < 8; c++) {
                         // If there is a visible child, it needs to be identical, even if empty
@@ -2039,7 +2172,7 @@ void GeomOctree::toHiddenGeometryDAG() {
 
                     if (identicalVisibleChildren) {
                         // Check if replacer is a unique node
-                        if (correspondences[replacer] != (id_t) - 1) {
+                        if (correspondences[replacer] != (id_t)-1) {
                             correspondences[replaced] = correspondences[replacer];
                         } else {
                             unresolvedCorrespondences[replaced] = replacer; // we don't know yet if replacer is unique
@@ -2049,7 +2182,7 @@ void GeomOctree::toHiddenGeometryDAG() {
                 }
             }
 
-            if (correspondences[nodeIndex] == (id_t) - 1) { // !found
+            if (correspondences[nodeIndex] == (id_t)-1) { // !found
                 correspondences[nodeIndex] = (id_t)uniqueNodes.size(); // the correspondence is this node itself
                 uniqueNodes.push_back(n);
             }
@@ -2059,7 +2192,7 @@ void GeomOctree::toHiddenGeometryDAG() {
         while (!unresolvedCorrespondences.empty()) {
             // Correspondences are pointing to the old node list, now make them point to new nodes
             for (auto it = unresolvedCorrespondences.begin(); it != unresolvedCorrespondences.end(); it++) {
-                if (correspondences[it->second] != (id_t) -1) {
+                if (correspondences[it->second] != (id_t)-1) {
                     // the correspondence has been resolved
                     correspondences[it->first] = correspondences[it->second];
                 } else if (unresolvedCorrespondences.find(it->second) != unresolvedCorrespondences.end()) {
@@ -2069,8 +2202,8 @@ void GeomOctree::toHiddenGeometryDAG() {
             }
         }
 
-//        if (!iternalCall)
-            printf("Reduced level %u from %lu to %lu nodes\n", lev, _data[lev].size(), uniqueNodes.size());
+        //        if (!iternalCall)
+        printf("Reduced level %u from %lu to %lu nodes\n", lev, _data[lev].size(), uniqueNodes.size());
 
         _data[lev].clear();
         _data[lev].shrink_to_fit();
@@ -2080,8 +2213,8 @@ void GeomOctree::toHiddenGeometryDAG() {
         _nNodes += _data[lev].size();
 
         // Update all pointers in the level above
-        for (id_t i = 0; i < _data[lev-1].size(); i++) {
-            Node * bn = &_data[lev-1][i];
+        for (id_t i = 0; i < _data[lev - 1].size(); i++) {
+            Node* bn = &_data[lev - 1][i];
             // For all children...
             for (int j = 0; j < 8; j++) {
                 // If this child exists...
@@ -2093,11 +2226,10 @@ void GeomOctree::toHiddenGeometryDAG() {
         }
     }
 
-//    _stats.toDAGTime = _clock.now() - ts;
+    //    _stats.toDAGTime = _clock.now() - ts;
 
     _state = S_DAG;
     _stats.nNodesDAG = _nNodes;
-
 
     // It's been a while, rewriting pseudoce as a fresh view
     /**
@@ -2152,8 +2284,6 @@ void GeomOctree::toHiddenGeometryDAG() {
      *
      */
 
-
     // Option 2.
     // - Use set intersections to find which nodes to compare to
 }
-

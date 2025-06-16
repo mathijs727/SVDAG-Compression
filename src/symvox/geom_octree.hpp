@@ -168,6 +168,8 @@ private: // Internal tools
     void diffSubtrees(unsigned int levA, unsigned int levB, const Node &nA, const Node &nB,
                  const unsigned int abortThreshold, unsigned int &accumulator, unsigned int &numLeaves);
 
+	size_t countVoxelDifferences(uint32_t lhs, uint32_t rhs, uint32_t level);
+
     uint64_t computeNodeHash(const Node &node, unsigned int depth, std::vector<uint64_t> &childHashes);
 
     void buildMultiMap(
