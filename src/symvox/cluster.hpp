@@ -372,7 +372,7 @@ public:
 
 
         hist.clear();
-        hist.reserve(histSize);
+        hist.resize(histSize);
         for (const auto &c : clusters) {
             hist[std::min(c.size() / binSize, (size_t) (histSize - 1))] += 1;
         }
