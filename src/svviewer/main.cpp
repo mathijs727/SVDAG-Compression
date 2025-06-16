@@ -44,11 +44,11 @@ bool finish = false;
 bool printCamera = false;
 float frameTime = 0;
 std::string filename = "";
-static char filenameInput[128] = "";
-static char filenameInput2[128] = "";
+static char filenameInput[256] = "";
+static char filenameInput2[256] = "";
 
-static char recordingInput[128] = "";
-static char loadRecordingInput[128] = "";
+static char recordingInput[256] = "";
+static char loadRecordingInput[256] = "";
 
 std::unique_ptr<OctreeDDARenderer> renderer;
 std::unique_ptr<EncodedOctree> encoded_octree;
