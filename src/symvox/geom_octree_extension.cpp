@@ -1009,29 +1009,27 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 
         auto tSimNodeStart = _clock.now();
 
-        std::vector<bool> isParentOfClusterReps(_data[lev].size());
-        size_t numParentClusters = 0;
-        for (int idA = 0; idA < _data[lev].size(); ++idA) {
-            const auto& n = _data[lev][idA];
-            // Don't merge nodes that are a parent of a cluster representative
-            bool isParentOfClusterRep = false;
-            for (int c = 0; c < 8; ++c) {
-                if (n.existsChild(c)) {
-                    if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
-                        isParentOfClusterRep = true;
-                        // curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
-                    }
-                }
-            }
-            isParentOfClusterReps[idA] = isParentOfClusterRep;
-            if (isParentOfClusterRep)
-                ++numParentClusters;
-        }
-        printf("Num parent clusters: %zu / %zu\n", numParentClusters, _data[lev].size());
+        //std::vector<bool> isParentOfClusterReps(_data[lev].size());
+        //size_t numParentClusters = 0;
+        //for (int idA = 0; idA < _data[lev].size(); ++idA) {
+        //    const auto& n = _data[lev][idA];
+        //    // Don't merge nodes that are a parent of a cluster representative
+        //    bool isParentOfClusterRep = false;
+        //    for (int c = 0; c < 8; ++c) {
+        //        if (n.existsChild(c)) {
+        //            if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
+        //                isParentOfClusterRep = true;
+        //                // curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
+        //            }
+        //        }
+        //    }
+        //    isParentOfClusterReps[idA] = isParentOfClusterRep;
+        //    if (isParentOfClusterRep)
+        //        ++numParentClusters;
+        //}
+        //printf("Num parent clusters: %zu / %zu\n", numParentClusters, _data[lev].size());
 
         // Todo: Try out #pragma omp declare reduction (merge : std::vector<int> : omp_out.insert(omp_out.end(), omp_in.begin(), omp_in.end()))
-        printf("Num items %zu\n", _data[lev].size());
-        size_t numConsidered = 0;
         // #pragma omp parallel for schedule(dynamic, 2)
         for (int idA = (int)_data[lev].size() - 1; idA >= 0; --idA) {
 
@@ -1091,7 +1089,6 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                 }
             } else {
                 auto candidates = matchMaps[lev].equal_range(nAKey);
-                numConsidered += std::distance(candidates.first, candidates.second);
                 for (auto it = candidates.first; it != candidates.second; ++it) {
                     id_t idB = it->second;
                     if (idA <= idB)
@@ -1130,8 +1127,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
 
                     // For subtrees with few leaf nodes, diff should be relatively lower
                     // --> If difference greater than avg amount of voxels in leaves, abort
-                    // float maxAllowedSubtreeDiff = 4.0 * numLeaves; // * allowedLossyDiffFactor;
-                    float maxAllowedSubtreeDiff = std::numeric_limits<float>::max();
+                    float maxAllowedSubtreeDiff = 4.0 * numLeaves; // * allowedLossyDiffFactor;
+                    //float maxAllowedSubtreeDiff = std::numeric_limits<float>::max();
 #pragma omp critical
                     if (diff <= maxAllowedDiff && diff < maxAllowedSubtreeDiff) {
                         // curSimilarNodes.insert()
@@ -1157,8 +1154,6 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
             }
         }
         _stats.lSimNodes += _clock.now() - tSimNodeStart;
-
-        printf("num considered = %zu\n", numConsidered);
 
         // printf("Avg num of leaves: %.2f, avg diff: %.2f", (float) numLeavesTotal / (float) numMatchesTotal, (float) diffTotal / (float) numMatchesTotal);
 
