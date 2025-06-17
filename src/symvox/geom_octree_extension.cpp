@@ -332,7 +332,6 @@ size_t GeomOctree::countVoxelDifferences(uint32_t level, uint32_t lhs, uint32_t 
             }
         }
     }
-    diffCount = 0;
     return diffCount;
 }
 
@@ -987,22 +986,21 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
             // FIXME: This is an ugly hack
             hashes[_levels - 3].clear();
             buildMultiMap(0, matchMaps, hashes, lev - 1, lev + 1);
-
         }
         // Todo: use higher match depth when lossyDiff is higher than 8
         buildMultiMap(currentMatchDepth, matchMaps, hashes, lev, lev + 1);
         _stats.lHashing += _clock.now() - tHashStart;
 
-            size_t xxx = 0;
-            size_t yyy = 0;
-            for (uint32_t i = 0; i < 256; ++i) {
-                auto candidates = matchMaps[lev].equal_range(i);
-                auto numCandidates = std::distance(candidates.first, candidates.second);
-                xxx += numCandidates * (numCandidates - 1);
-                yyy += numCandidates;
-            }
-            printf("Num nodes: %zu\n", yyy);
-            printf("Max possible matches: %zu\n", xxx);
+        // size_t xxx = 0;
+        // size_t yyy = 0;
+        // for (uint32_t i = 0; i < 256; ++i) {
+        //     auto candidates = matchMaps[lev].equal_range(i);
+        //     auto numCandidates = std::distance(candidates.first, candidates.second);
+        //     xxx += numCandidates * (numCandidates - 1);
+        //     yyy += numCandidates;
+        // }
+        // printf("Num nodes: %zu\n", yyy);
+        // printf("Max possible matches: %zu\n", xxx);
 
         //////// FINDING EDGES FOR CLUSTERING ////////
         // For all nodes in this level, in reverse order (starting with least referenced)
@@ -1021,7 +1019,7 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                 if (n.existsChild(c)) {
                     if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
                         isParentOfClusterRep = true;
-                        //curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
+                        // curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
                     }
                 }
             }
@@ -1051,21 +1049,21 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
             uint64_t nAKey = hashes[lev][idA];
 
             // Don't merge nodes that are a parent of a cluster representative
-            // bool isParentOfClusterRep = false;
-            // for (int c = 0; c < 8; ++c) {
-            //    if (!isParentOfClusterRep && n.existsChild(c)) {
-            // #pragma omp critical
-            //         if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
-            //             isParentOfClusterRep = true;
-            //             curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
-            //         }
-            //     }
-            // }
-            // if (isParentOfClusterRep)
-            //     continue;
-
-            if (isParentOfClusterReps[idA])
+            bool isParentOfClusterRep = false;
+            for (int c = 0; c < 8; ++c) {
+                if (!isParentOfClusterRep && n.existsChild(c)) {
+#pragma omp critical
+                    if (prevClusterReps.find(n.children[c]) != prevClusterReps.end()) {
+                        isParentOfClusterRep = true;
+                        curClusterReps[idA] = true; // this node is an indirect parent of a cluster rep
+                    }
+                }
+            }
+            if (isParentOfClusterRep)
                 continue;
+
+            // if (isParentOfClusterReps[idA])
+            //     continue;
 
             if (lev == _levels - 2) {
                 for (int i = 0; i < 64; ++i) {
@@ -1100,15 +1098,15 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                         continue; // don't match with itself or with previous nodes (since idB will already have been compared to idA)
                     if (refCounts[lev][idB] > includedNodeRefCount)
                         continue; // Only compare to other 1 ref nodes
-                    if (isParentOfClusterReps[idB])
-                        continue;
+                    // if (isParentOfClusterReps[idB])
+                    //     continue;
 
                     // Check how similar this node actually is: Deep comparison (expensive!!)
                     const Node& nB = _data[lev][idB];
                     unsigned int diff = 0, numLeaves = 0;
-                    // this->diffSubtrees(lev, lev, n, nB, maxAllowedDiff + 1, diff, numLeaves);
-                    diff = this->countVoxelDifferences(lev, idA, idB);
-                    
+                    this->diffSubtrees(lev, lev, n, nB, maxAllowedDiff + 1, diff, numLeaves);
+                    // diff = this->countVoxelDifferences(lev, idA, idB);
+
                     // Compare differences between children
                     // for (int c = 0; c < 8; c++) {
                     //     if (n.existsChild(c) && nB.existsChild(c)) {
@@ -1183,8 +1181,8 @@ void GeomOctree::toLossyDag(float lossyInflation, float allowedLossyDiffFactor, 
                 continue;
             correspondences[idA] = (id_t)uniqueNodes.size(); // the correspondence is this node itself
             uniqueNodes.push_back(_data[lev][idA]);
-            //if (isParentOfClusterReps[idA])
-            //    curClusterReps[idA] = true;
+            // if (isParentOfClusterReps[idA])
+            //     curClusterReps[idA] = true;
         }
 
         // Stats
